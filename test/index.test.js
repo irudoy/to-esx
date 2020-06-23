@@ -163,6 +163,24 @@ test('JSX attr spread props', async ({ is }) => {
   is(convert(src), esx)
 })
 
+test('component spread rest props', async ({ is }) => {
+  const src =
+`import React from 'react'
+import ComponentA from './a'
+const ComponentB = ({ a, b, ...rest }) => <ComponentA a={a} b={b} {...rest} />
+export default ComponentB`
+
+  const esx =
+`const esx = require('esx')();
+import React from 'react'
+import ComponentA from './a'
+esx.register({ ComponentA });
+const ComponentB = ({ a, b, ...rest }) => esx \`<ComponentA a=\${a} b=\${b} ...\${rest} />\`
+export default ComponentB`
+
+  is(convert(src), esx)
+})
+
 test('JSX component registration – function', async ({ is }) => {
   const src = [
     `const React = require('react')`,
@@ -176,6 +194,38 @@ test('JSX component registration – function', async ({ is }) => {
     'esx.register({ Foo });',
     'module.exports = () => esx `<div><Foo>hi</Foo></div>`'
   ].join('\n')
+  is(convert(src), esx)
+})
+
+test('JSX component registration – import', async ({ is }) => {
+  const src =
+`import React from 'react'
+import Foo from './foo'
+module.exports = <div><Foo/></div>`
+
+  const esx =
+`const esx = require('esx')();
+import React from 'react'
+import Foo from './foo'
+esx.register({ Foo });
+module.exports = esx \`<div><Foo/></div>\``
+
+  is(convert(src), esx)
+})
+
+test('JSX component registration – import named with default', async ({ is }) => {
+  const src =
+`import React from 'react'
+import Foo, { Bar, Baz } from './foo'
+export default <div><Foo/><Bar/><Baz/></div>`
+
+  const esx =
+`const esx = require('esx')();
+import React from 'react'
+import Foo, { Bar, Baz } from './foo'
+esx.register({ Baz, Bar, Foo });
+export default esx \`<div><Foo/><Bar/><Baz/></div>\``
+
   is(convert(src), esx)
 })
 
@@ -310,6 +360,21 @@ test('JSX multiple inline components registration', async ({ is }) => {
     '  return esx._r("A", A)._r("B", B) `<div><A/><B/></div>`',
     '}'
   ].join('\n')
+  is(convert(src), esx)
+})
+
+test('JSX inline registration of exported component', async ({ is }) => {
+  const src =
+`import React from 'react';
+export const Component = () => <div>foo</div>;
+export default <Component />`
+
+  const esx =
+`const esx = require('esx')();
+import React from 'react';
+export const Component = () => esx \`<div>foo</div>\`;
+export default esx._r("Component", Component) \`<Component />\``
+
   is(convert(src), esx)
 })
 
@@ -454,6 +519,21 @@ test('createElement hardcoded props', async ({ is }) => {
     `const React = require('react')`,
     'module.exports = () => esx `<img a="42" b="test"/>`'
   ].join('\n')
+  is(convert(src), esx)
+})
+
+test('createElement computed props', async ({ is }) => {
+  const src =
+`const React = require('react')
+const foo = 'data-foo'
+module.exports = React.createElement("div", { [foo]: 'bar' });`
+
+  const esx =
+`const esx = require('esx')();
+const React = require('react')
+const foo = 'data-foo'
+module.exports = esx \`<div ...\${{ [foo]: 'bar' }}/>\`;`
+
   is(convert(src), esx)
 })
 

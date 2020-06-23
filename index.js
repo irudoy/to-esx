@@ -15,6 +15,7 @@ module.exports = convert
 function convert (src) {
   const chunks = src.split('')
   const ast = parse(src, {
+    ecmaVersion: 2020,
     allowImportExportEverywhere: true,
     preserveParens: true,
     allowHashBang: true
@@ -308,6 +309,9 @@ function convert (src) {
     for (const param of params) {
       const found = (param.name === name && param) || (
         param.properties && param.properties.find(function match ({ value }) {
+          // RestElement node has no value
+          // example: const C = ({ a, b, ...rest }) => React.createElement(...);
+          if (!value) return false
           if (value.type === 'ObjectPattern') {
             return value.properties.find(match)
           }
@@ -320,7 +324,9 @@ function convert (src) {
 
   function hasVar ({ id, type }, name) {
     return id.properties
-      ? id.properties.find(({ value }) => value.name === name)
+      // RestElement node has no value
+      // example: const C = ({ a, b, ...rest }) => React.createElement(...);
+      ? id.properties.find(({ value }) => value && value.name === name)
       : type === 'VariableDeclarator' && id.name === name
   }
 
@@ -359,7 +365,19 @@ function convert (src) {
             for (const n of p.body) {
               let found = false
               const [name] = path
-              if (n.type === 'VariableDeclaration') {
+              if (n.type === 'ExportNamedDeclaration' && n.declaration && n.declaration.type === 'VariableDeclaration') {
+                for (const d of n.declaration.declarations) {
+                  found = hasVar(d, name) && n.declaration
+                  if (found) break
+                }
+              } else if (n.type === 'ImportDeclaration') {
+                for (const specifier of n.specifiers) {
+                  if (specifier.local.name === name) {
+                    found = n
+                    break
+                  }
+                }
+              } else if (n.type === 'VariableDeclaration') {
                 for (const d of n.declarations) {
                   found = (hasVar(d, name) && n) ||
                     (d.init && d.init.params && findArg(d.init.params, name))
@@ -485,14 +503,18 @@ function convert (src) {
     if (props.type !== 'ObjectExpression') {
       return `...\${${source(props)}}`
     }
-    const { properties } = props
-    return properties.map(({ key, value }) => {
+    let s = ''
+    for (const { key, value, computed } of props.properties) {
+      if (computed) {
+        return `...\${${source(props)}}`
+      }
       const v = value.type === 'Literal' && typeof value.value !== 'boolean'
         ? `"${value.value}"`
         : `\${${source(value)}}`
       const k = key.value || key.name
-      return `${k}=${v}`
-    }).join(' ')
+      s = `${s} ${k}=${v}`
+    }
+    return s.trim()
   }
 
   function walk (node, parent, fn) {
